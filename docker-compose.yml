@@ -1,0 +1,6 @@
+services:
+  soundtouch-player:
+    build: .
+    ports:
+      - "5010:5010"
+    restart: unless-stopped
