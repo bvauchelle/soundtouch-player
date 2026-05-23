@@ -5,19 +5,20 @@ export default {
     { id: 'device2', name: 'Cuisine', ip: '192.168.1.17' }, // SoundTouch 10
   ],
 
-  // ── Stream to play ──────────────────────────────────────────────────────────
-  // Must be HTTP (not HTTPS) — SoundTouch firmware fetches it directly.
-  STREAM_URL: 'http://icecast.radiofrance.fr/franceinter-hifi.aac',
-  STATION_NAME: 'France Inter',
-
-  // Optional station logo. Either a public URL or a path served by this app.
-  // For a local file: drop it into the `public/` folder and reference it
-  // by name (e.g. /logo.png for public/logo.png). Leave null to hide.
-  LOGO_URL: '/france-inter.svg',
-
-  // Preset slot used to store the station on each device (1–6).
-  // 6 is least likely to overwrite something you care about.
-  PRESET_SLOT: 1,
+  // ── Streams ────────────────────────────────────────────────────────────────
+  // Up to 6 entries, each mapped to a SoundTouch preset slot (1–6).
+  // Leave `url` empty to disable a slot — it won't appear in the UI dropdown.
+  // Stream URLs must be HTTP (not HTTPS) — SoundTouch firmware fetches them directly.
+  // `logo` is optional: a public URL or a path served by this app
+  // (e.g. /logo.png for public/logo.png).
+  STREAMS: [
+    { slot: 1, name: 'France Inter', url: 'http://icecast.radiofrance.fr/franceinter-hifi.aac', logo: '/france-inter.svg' },
+    { slot: 2, name: 'France Info',  url: 'http://icecast.radiofrance.fr/franceinfo-hifi.aac',  logo: '/franceinfo.svg' },
+    { slot: 3, name: '',             url: '',                                                    logo: null },
+    { slot: 4, name: '',             url: '',                                                    logo: null },
+    { slot: 5, name: '',             url: '',                                                    logo: null },
+    { slot: 6, name: '',             url: '',                                                    logo: null },
+  ],
 
   // ── Web server ──────────────────────────────────────────────────────────────
   HOST: '0.0.0.0',

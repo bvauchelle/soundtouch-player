@@ -51,16 +51,15 @@ async function postXml(ip, p, xml) {
   }
 }
 
-async function play(ip) {
-  const jsonUrl = `http://${localIp()}:${config.PORT}/station.json`;
-  const slot = config.PRESET_SLOT;
-  const presetKey = `PRESET_${slot}`;
+async function play(ip, stream) {
+  const jsonUrl = `http://${localIp()}:${config.PORT}/station.json/${stream.slot}`;
+  const presetKey = `PRESET_${stream.slot}`;
 
   // Step 1 — write the station into the chosen preset slot
   const storeXml =
-    `<preset id="${slot}">` +
+    `<preset id="${stream.slot}">` +
     `<ContentItem source="LOCAL_INTERNET_RADIO" type="stationurl" location="${xmlEscape(jsonUrl)}">` +
-    `<itemName>${xmlEscape(config.STATION_NAME)}</itemName>` +
+    `<itemName>${xmlEscape(stream.name)}</itemName>` +
     `</ContentItem>` +
     `</preset>`;
 
@@ -129,6 +128,8 @@ async function stopDevice(ip) {
 }
 
 const deviceById = (id) => config.DEVICES.find((d) => d.id === id);
+const enabledStreams = () => config.STREAMS.filter((s) => s.url);
+const streamBySlot = (slot) => enabledStreams().find((s) => String(s.slot) === String(slot));
 
 // Bose multi-room sync: cache each device's deviceID (MAC) — needed for /setZone.
 const deviceIdCache = new Map();
@@ -145,11 +146,11 @@ async function fetchDeviceId(ip) {
   return null;
 }
 
-async function playZone() {
+async function playZone(stream) {
   const [master, ...slaves] = config.DEVICES;
 
   // Solo case: just play.
-  if (!slaves.length) return play(master.ip);
+  if (!slaves.length) return play(master.ip, stream);
 
   // Resolve deviceIDs for everyone in the zone.
   const masterId = await fetchDeviceId(master.ip);
@@ -167,40 +168,42 @@ async function playZone() {
   if (!zoneResult.ok) return { ...zoneResult, step: 'setZone' };
 
   // Now start playback on the master — slaves auto-sync.
-  const playResult = await play(master.ip);
+  const playResult = await play(master.ip, stream);
   if (!playResult.ok) return { ...playResult, step: 'play' };
 
   return { ok: true };
 }
 
 // ── Routes ──────────────────────────────────────────────────────────────────
-app.get('/station.json', (_req, res) => {
+app.get('/station.json/:slot', (req, res) => {
+  const stream = streamBySlot(req.params.slot);
+  if (!stream) return res.status(404).json({ error: 'Unknown stream slot' });
   res.json({
-    audio: { hasPlaylist: false, isRealtime: true, streamUrl: config.STREAM_URL },
+    audio: { hasPlaylist: false, isRealtime: true, streamUrl: stream.url },
     imageUrl: '',
-    name: config.STATION_NAME,
+    name: stream.name,
     streamType: 'liveRadio',
   });
 });
 
 app.get('/api/config', (_req, res) => {
   res.json({
-    streamUrl: config.STREAM_URL,
-    stationName: config.STATION_NAME,
-    logoUrl: config.LOGO_URL || null,
+    streams: enabledStreams().map((s) => ({ slot: s.slot, name: s.name, logo: s.logo || null })),
     devices: config.DEVICES.map((d) => ({ id: d.id, name: d.name })),
   });
 });
 
-app.get('/play/:deviceId', async (req, res) => {
-  const { deviceId } = req.params;
+app.get('/play/:deviceId/:slot', async (req, res) => {
+  const { deviceId, slot } = req.params;
+  const stream = streamBySlot(slot);
+  if (!stream) return res.status(404).json({ error: 'Unknown stream slot' });
   let results;
   if (deviceId === 'all') {
-    results = { Zone: await playZone() };
+    results = { Zone: await playZone(stream) };
   } else {
     const device = deviceById(deviceId);
     if (!device) return res.status(404).json({ error: 'Unknown device' });
-    results = { [device.name]: await play(device.ip) };
+    results = { [device.name]: await play(device.ip, stream) };
   }
   const overall = Object.values(results).every((r) => r.ok);
   res.status(overall ? 200 : 502).json({ success: overall, results });
