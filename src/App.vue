@@ -28,11 +28,11 @@ let pollHandle = null;
 
 onMounted(async () => {
   try {
-    const res = await fetch('/api/config');
-    const data = await res.json();
-    streams.value = data.streams ?? [];
+    const configFile = await fetch('/api/config');
+    const config = await configFile.json();
+    streams.value = config.streams ?? [];
     selectedSlot.value = streams.value[0]?.slot ?? null;
-    devices.value = data.devices;
+    devices.value = config.devices;
   } catch {
     message.value = '✗ Impossible de charger la configuration';
     messageStatus.value = 'fail';
