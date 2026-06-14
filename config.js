@@ -13,7 +13,7 @@ export default {
   // (e.g. /logo.png for public/logo.png).
   STREAMS: [
     { slot: 1, name: 'France Inter', url: 'http://icecast.radiofrance.fr/franceinter-hifi.aac', logo: '/france-inter.svg' },
-    { slot: 2, name: 'France Info',  url: 'http://icecast.radiofrance.fr/franceinfo-hifi.aac',  logo: '/franceinfo.svg' },
+    { slot: 2, name: 'France Info',  url: 'http://icecast.radiofrance.fr/franceinfo-hifi.aac',  logo: '/Franceinfo.svg' },
     { slot: 3, name: '',             url: '',                                                    logo: null },
     { slot: 4, name: '',             url: '',                                                    logo: null },
     { slot: 5, name: '',             url: '',                                                    logo: null },
