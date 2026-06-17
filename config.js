@@ -24,7 +24,7 @@ export default {
   HOST: '0.0.0.0',
   PORT: 5010,
 
-  // Set this to your NAS's fixed LAN IP when running inside Docker.
+  // Set this to your local server fixed LAN IP when running inside Docker.
   // Leave as null to auto-detect (works when running directly on Windows).
-  SERVER_IP: '192.168.1.X', // ← replace with your NAS IP
+  SERVER_IP: '192.168.1.X',
 };
