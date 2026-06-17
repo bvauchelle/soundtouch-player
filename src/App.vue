@@ -161,76 +161,81 @@ async function setVolume(deviceId, value) {
 </script>
 
 <template>
-  <header class="header">
-    <img
-      v-if="logoUrl"
-      :src="logoUrl"
-      :alt="stationName"
-      class="logo"
-      @error="logoUrl = null"
-    />
-    <h1>{{ stationName }}</h1>
-    <select
-      v-if="streams.length > 1"
-      class="stream-select"
-      :value="selectedSlot"
-      @change="selectedSlot = Number($event.target.value)"
-    >
-      <option v-for="s in streams" :key="s.slot" :value="s.slot">{{ s.name }}</option>
-    </select>
-  </header>
-  <div class="devices">
-    <div v-for="d in devices" :key="d.id" class="device">
-      <button
-        class="btn"
-        :class="{ playing: isPlaying(d.id) }"
-        :disabled="isBusy(d.id)"
-        @click="toggle(d.id)"
+  <div class="app">
+    <header class="header">
+      <img
+        v-if="logoUrl"
+        :src="logoUrl"
+        :alt="stationName"
+        class="logo"
+        @error="logoUrl = null"
+      />
+      <h1>{{ stationName }}</h1>
+      <select
+        v-if="streams.length > 1"
+        class="stream-select"
+        :value="selectedSlot"
+        @change="selectedSlot = Number($event.target.value)"
       >
-        <span v-if="isBusy(d.id)" class="spinner" aria-hidden="true"></span>
-        <span v-else class="icon">{{ isPlaying(d.id) ? '⏹' : '▶' }}</span>
-        {{ d.name }}
-      </button>
-      <div class="volume">
-        <input
-          type="range"
-          min="0"
-          max="100"
-          step="1"
-          class="slider"
-          :value="states[d.id]?.volume ?? 0"
-          @input="setVolume(d.id, $event.target.value)"
-        />
-        <span class="vol-label">{{ states[d.id]?.volume ?? '–' }}</span>
+        <option v-for="s in streams" :key="s.slot" :value="s.slot">{{ s.name }}</option>
+      </select>
+    </header>
+    <div class="devices">
+      <div v-for="d in devices" :key="d.id" class="device">
+        <button
+          class="btn"
+          :class="{ playing: isPlaying(d.id) }"
+          :disabled="isBusy(d.id)"
+          @click="toggle(d.id)"
+        >
+          <span v-if="isBusy(d.id)" class="spinner" aria-hidden="true"></span>
+          <span v-else class="icon">{{ isPlaying(d.id) ? '⏹' : '▶' }}</span>
+          {{ d.name }}
+        </button>
+        <div class="volume">
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            class="slider"
+            :value="states[d.id]?.volume ?? 0"
+            @input="setVolume(d.id, $event.target.value)"
+          />
+          <span class="vol-label">{{ states[d.id]?.volume ?? '–' }}</span>
+        </div>
       </div>
+      <button
+        v-if="showAll"
+        class="btn btn-all"
+        :class="{ playing: anyPlaying }"
+        :disabled="isBusy('all')"
+        @click="toggle('all')"
+      >
+        <span v-if="isBusy('all')" class="spinner" aria-hidden="true"></span>
+        <span v-else class="icon">{{ anyPlaying ? '⏹' : '▶' }}</span>
+        Les deux
+      </button>
     </div>
-    <button
-      v-if="showAll"
-      class="btn btn-all"
-      :class="{ playing: anyPlaying }"
-      :disabled="isBusy('all')"
-      @click="toggle('all')"
-    >
-      <span v-if="isBusy('all')" class="spinner" aria-hidden="true"></span>
-      <span v-else class="icon">{{ anyPlaying ? '⏹' : '▶' }}</span>
-      Les deux
-    </button>
+    <div id="msg" :class="messageStatus">{{ message }}</div>
   </div>
-  <div id="msg" :class="messageStatus">{{ message }}</div>
 </template>
 
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   font-family: system-ui, sans-serif;
-  background: #1a1a2e;
+  background: #000000;
   color: #eee;
   min-height: 100vh;
+}
+.app {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2rem;
+  align-items: stretch;
+  gap: 5rem;
+  padding: 2rem;
+  height: 100%;
 }
 .header {
   display: flex;
@@ -275,7 +280,7 @@ p  { font-size: .85rem; color: #aaa; }
   -webkit-appearance: none;
   appearance: none;
   height: 4px;
-  background: #444;
+  background: #b4bec7;
   border-radius: 2px;
   outline: none;
 }
@@ -286,7 +291,7 @@ p  { font-size: .85rem; color: #aaa; }
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #e1251b;
+  background: #ffffff;
   cursor: pointer;
   border: none;
 }
