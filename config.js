@@ -28,5 +28,5 @@ export default {
 
   // Set this to your local server fixed LAN IP when running inside Docker.
   // Leave as null to auto-detect (works when running directly on Windows).
-  SERVER_IP: '192.168.1.40',
+  SERVER_IP: null,
 };
