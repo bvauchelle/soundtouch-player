@@ -1,10 +1,12 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 
+import { cloudflare } from "@cloudflare/vite-plugin";
+
 // Dev: Vite serves the SPA on 5173 and proxies API calls to Express on 5010.
 // Prod: `npm run build` outputs `dist/`, which server.js serves as static.
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), cloudflare()],
   server: {
     port: 5173,
     proxy: {
