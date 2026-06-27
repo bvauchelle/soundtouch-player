@@ -36,43 +36,72 @@ const bose = (ip, p) => `http://${ip}:8090${p}`;
 
 async function postXml(ip, p, xml) {
   try {
-    const r = await fetch(bose(ip, p), {
+    const url = bose(ip, p);
+    const r = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/xml' },
       body: xml,
       signal: AbortSignal.timeout(5000),
     });
     const result = { ok: r.ok, status: r.status };
-    if (!r.ok) result.device_response = (await r.text()).slice(0, 500);
+    if (!r.ok) {
+      result.device_response = (await r.text()).slice(0, 500);
+      console.log(`Bose POST failed: ${url}`, result);
+    }
     return result;
   } catch (err) {
-    if (err.name === 'TimeoutError') return { ok: false, error: 'timeout' };
-    return { ok: false, error: 'device unreachable' };
+    const result = err.name === 'TimeoutError' ? { ok: false, error: 'timeout' } : { ok: false, error: 'device unreachable' };
+    console.log(`Bose POST error: ${bose(ip, p)}`, result, err.message);
+    return result;
   }
 }
 
 async function play(ip, stream) {
-  const jsonUrl = `http://${localIp()}:${config.PORT}/station.json/${stream.slot}`;
+  const timestamp = new Date().toISOString();
+  console.log(`\n━━ PLAY START [${timestamp}] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+  console.log(`  Device: ${ip}`);
+  console.log(`  Slot: ${stream.slot}`);
+  console.log(`  Stream: ${stream.name}`);
+  console.log(`  Stream URL (direct): ${stream.url}`);
   const presetKey = `PRESET_${stream.slot}`;
 
-  // Step 1 — write the station into the chosen preset slot
+  // Step 1 — write the station into the chosen preset slot with direct stream URL
   const storeXml =
     `<preset id="${stream.slot}">` +
-    `<ContentItem source="LOCAL_INTERNET_RADIO" type="stationurl" location="${xmlEscape(jsonUrl)}">` +
+    `<ContentItem source="LOCAL_INTERNET_RADIO" type="stationurl" location="${xmlEscape(stream.url)}">` +
     `<itemName>${xmlEscape(stream.name)}</itemName>` +
     `</ContentItem>` +
     `</preset>`;
 
+  console.log(`\n1️⃣  Sending storePreset with direct stream URL...`);
+  console.log(storeXml);
   let result = await postXml(ip, '/storePreset', storeXml);
-  if (!result.ok) return { ...result, step: 'storePreset' };
+  if (!result.ok) {
+    console.log(`  ✗ storePreset FAILED: ${JSON.stringify(result)}`);
+    return { ...result, step: 'storePreset' };
+  }
+  console.log(`  ✓ storePreset OK`);
+
+  // Give the device a moment to commit the new preset before pressing the key.
+  console.log(`\n⏳ Waiting 1.2s for device to commit preset...`);
+  await new Promise((resolve) => setTimeout(resolve, 1200));
 
   // Step 2 — press + release the preset key to start playback
+  console.log(`\n2️⃣  Sending key press/release for ${presetKey}...`);
+  console.log(`   👉 Device will now attempt to play the stream directly`);
   for (const state of ['press', 'release']) {
     result = await postXml(ip, '/key', `<key state="${state}" sender="Gabbo">${presetKey}</key>`);
-    if (!result.ok) return { ...result, step: `key ${state}` };
+    if (!result.ok) {
+      console.log(`  ✗ key ${state} FAILED: ${JSON.stringify(result)}`);
+      return { ...result, step: `key ${state}` };
+    }
+    console.log(`  ✓ key ${state} OK`);
   }
+  console.log(`\n✓ PLAY command sent successfully`);
+  console.log(`━━ Device should now be playing the stream ━━\n`);
   return { ok: true };
 }
+
 
 async function status(ip) {
   try {
@@ -176,14 +205,23 @@ async function playZone(stream) {
 
 // ── Routes ──────────────────────────────────────────────────────────────────
 app.get('/station.json/:slot', (req, res) => {
-  const stream = streamBySlot(req.params.slot);
-  if (!stream) return res.status(404).json({ error: 'Unknown stream slot' });
-  res.json({
+  const timestamp = new Date().toISOString();
+  const slot = req.params.slot;
+  const ip = req.ip;
+  console.log(`\n✓ [${timestamp}] station.json FETCH received - slot=${slot} from=${ip}`);
+  const stream = streamBySlot(slot);
+  if (!stream) {
+    console.log(`  ✗ No stream found for slot=${slot}`);
+    return res.status(404).json({ error: 'Unknown stream slot' });
+  }
+  const response = {
     audio: { hasPlaylist: false, isRealtime: true, streamUrl: stream.url },
     imageUrl: '',
     name: stream.name,
     streamType: 'liveRadio',
-  });
+  };
+  console.log(`  ✓ Responding with stream: ${stream.name} (${stream.url})`);
+  res.json(response);
 });
 
 app.get('/api/config', (_req, res) => {
