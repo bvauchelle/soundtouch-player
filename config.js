@@ -1,8 +1,10 @@
 // ── Configure your SoundTouch devices ─────────────────────────────────────
 export default {
   DEVICES: [
-    { id: 'device1', name: 'Séjour',  ip: '192.168.1.16' }, // SoundTouch 20
-    { id: 'device2', name: 'Cuisine', ip: '192.168.1.17' }, // SoundTouch 10
+    { id: 'device1', name: 'Séjour',  ip: '192.168.1.16' },
+    { id: 'device2', name: 'Cuisine', ip: '192.168.1.17' }, 
+    { id: 'device3', name: 'Bureau',  ip: '192.168.1.43' },
+
   ],
 
   // ── Streams ────────────────────────────────────────────────────────────────
@@ -12,7 +14,7 @@ export default {
   // `logo` is optional: a public URL or a path served by this app
   // (e.g. /logo.png for public/logo.png).
   STREAMS: [
-    { slot: 1, name: 'France Inter', url: 'http://icecast.radiofrance.fr/franceinter-hifi.aac', logo: '/france-inter.svg' },
+    { slot: 1, name: 'France Inter', url: 'http://icecast.radiofrance.fr/franceinter-midfi.mp3', logo: '/france-inter.svg' },
     { slot: 2, name: 'France Info',  url: 'http://icecast.radiofrance.fr/franceinfo-hifi.aac',  logo: '/Franceinfo.svg' },
     { slot: 3, name: '',             url: '',                                                    logo: null },
     { slot: 4, name: '',             url: '',                                                    logo: null },
@@ -26,5 +28,5 @@ export default {
 
   // Set this to your local server fixed LAN IP when running inside Docker.
   // Leave as null to auto-detect (works when running directly on Windows).
-  SERVER_IP: '192.168.1.X',
+  SERVER_IP: '192.168.1.40',
 };
