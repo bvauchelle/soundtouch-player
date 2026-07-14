@@ -8,15 +8,19 @@
     "dev:server": "node --watch server.js",
     "dev:client": "vite",
     "build": "vite build",
-    "start": "node server.js"
+    "start": "node server.js",
+    "deploy": "npm run build && wrangler deploy",
+    "preview": "npm run build && wrangler dev"
   },
   "dependencies": {
     "express": "^4.21.2"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.44.0",
     "@vitejs/plugin-vue": "^5.2.1",
     "concurrently": "^9.1.2",
     "vite": "^6.0.7",
-    "vue": "^3.5.13"
+    "vue": "^3.5.13",
+    "wrangler": "^4.110.0"
   }
 }
