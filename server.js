@@ -1,15 +1,15 @@
 /**
- * SoundTouch Player — tiny local web server (Node/Express version)
- * Plays a stream on Bose SoundTouch devices via the local-network REST API,
- * using LOCAL_INTERNET_RADIO (works without Bose cloud).
- *
- * Flow per device:
- *   1. Device fetches /station.json from this server (LAN IP, not localhost).
- *   2. We POST /storePreset to write that JSON URL into a preset slot.
- *   3. We POST /key PRESET_N to play it immediately.
- */
+* SoundTouch Player — tiny local web server (Node/Express version)
+* Plays a stream on Bose SoundTouch devices via UPnP AVTransport (port 8091).
+*
+* Flow per device:
+*   1. POST UPnP SetAVTransportURI with the direct stream URL.
+*   2. POST UPnP Play to start playback.
+*
+* Note: LOCAL_INTERNET_RADIO source (SoundTouch HTTP API) is not supported
+* by firmware 27.x on SoundTouch 10. UPnP MediaRenderer works on all models.
+*/
 import express from 'express';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import config from './config.js';
@@ -19,18 +19,8 @@ const app = express();
 
 const xmlEscape = (s) =>
   String(s).replaceAll(/[<>&"']/g, (c) =>
-    ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c])
+    ({ '<': '<', '>': '>', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c])
   );
-
-function localIp() {
-  if (config.SERVER_IP && config.SERVER_IP !== '192.168.1.X') return config.SERVER_IP;
-  for (const iface of Object.values(os.networkInterfaces())) {
-    for (const addr of iface || []) {
-      if (addr.family === 'IPv4' && !addr.internal) return addr.address;
-    }
-  }
-  return '127.0.0.1';
-}
 
 const bose = (ip, p) => `http://${ip}:8090${p}`;
 
@@ -56,49 +46,62 @@ async function postXml(ip, p, xml) {
   }
 }
 
-async function play(ip, stream) {
-  const timestamp = new Date().toISOString();
-  console.log(`\n━━ PLAY START [${timestamp}] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-  console.log(`  Device: ${ip}`);
-  console.log(`  Slot: ${stream.slot}`);
-  console.log(`  Stream: ${stream.name}`);
-  console.log(`  Stream URL (direct): ${stream.url}`);
-  const presetKey = `PRESET_${stream.slot}`;
+const UPNP_PORT = 8091;
+const UPNP_NS = 'urn:schemas-upnp-org:service:AVTransport:1';
 
-  // Step 1 — write the station into the chosen preset slot with direct stream URL
-  const storeXml =
-    `<preset id="${stream.slot}">` +
-    `<ContentItem source="LOCAL_INTERNET_RADIO" type="stationurl" location="${xmlEscape(stream.url)}">` +
-    `<itemName>${xmlEscape(stream.name)}</itemName>` +
-    `</ContentItem>` +
-    `</preset>`;
+function soapEnvelope(body) {
+  return (
+    '<?xml version="1.0"?>' +
+    '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"' +
+    ' s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">' +
+    `<s:Body>${body}</s:Body></s:Envelope>`
+  );
+}
 
-  console.log(`\n1️⃣  Sending storePreset with direct stream URL...`);
-  console.log(storeXml);
-  let result = await postXml(ip, '/storePreset', storeXml);
-  if (!result.ok) {
-    console.log(`  ✗ storePreset FAILED: ${JSON.stringify(result)}`);
-    return { ...result, step: 'storePreset' };
-  }
-  console.log(`  ✓ storePreset OK`);
-
-  // Give the device a moment to commit the new preset before pressing the key.
-  console.log(`\n⏳ Waiting 1.2s for device to commit preset...`);
-  await new Promise((resolve) => setTimeout(resolve, 1200));
-
-  // Step 2 — press + release the preset key to start playback
-  console.log(`\n2️⃣  Sending key press/release for ${presetKey}...`);
-  console.log(`   👉 Device will now attempt to play the stream directly`);
-  for (const state of ['press', 'release']) {
-    result = await postXml(ip, '/key', `<key state="${state}" sender="Gabbo">${presetKey}</key>`);
-    if (!result.ok) {
-      console.log(`  ✗ key ${state} FAILED: ${JSON.stringify(result)}`);
-      return { ...result, step: `key ${state}` };
+async function upnpAction(ip, action, innerXml) {
+  const url = `http://${ip}:${UPNP_PORT}/AVTransport/Control`;
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/xml; charset="utf-8"',
+        'SOAPAction': `"${UPNP_NS}#${action}"`,
+      },
+      body: soapEnvelope(innerXml),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!r.ok) {
+      const text = (await r.text()).slice(0, 400);
+      console.log(`UPnP ${action} failed [${ip}]:`, r.status, text);
+      return { ok: false, status: r.status, step: action };
     }
-    console.log(`  ✓ key ${state} OK`);
+    return { ok: true };
+  } catch (err) {
+    const result = err.name === 'TimeoutError'
+      ? { ok: false, error: 'timeout', step: action }
+      : { ok: false, error: 'device unreachable', step: action };
+    console.log(`UPnP ${action} error [${ip}]:`, err.message);
+    return result;
   }
-  console.log(`\n✓ PLAY command sent successfully`);
-  console.log(`━━ Device should now be playing the stream ━━\n`);
+}
+
+const setUriXml = (url) =>
+  `<u:SetAVTransportURI xmlns:u="${UPNP_NS}">` +
+  `<InstanceID>0</InstanceID>` +
+  `<CurrentURI>${xmlEscape(url)}</CurrentURI>` +
+  `<CurrentURIMetaData></CurrentURIMetaData>` +
+  `</u:SetAVTransportURI>`;
+
+const playXml = () =>
+  `<u:Play xmlns:u="${UPNP_NS}"><InstanceID>0</InstanceID><Speed>1</Speed></u:Play>`;
+
+async function play(ip, stream) {
+  console.log(`\n━━ PLAY [${ip}] ${stream.name} ━━`);
+  const r1 = await upnpAction(ip, 'SetAVTransportURI', setUriXml(stream.url));
+  if (!r1.ok) return r1;
+  const r2 = await upnpAction(ip, 'Play', playXml());
+  if (!r2.ok) return r2;
+  console.log(`  ✓ UPnP play sent to ${ip}`);
   return { ok: true };
 }
 
@@ -160,70 +163,46 @@ const deviceById = (id) => config.DEVICES.find((d) => d.id === id);
 const enabledStreams = () => config.STREAMS.filter((s) => s.url);
 const streamBySlot = (slot) => enabledStreams().find((s) => String(s.slot) === String(slot));
 
-// Bose multi-room sync: cache each device's deviceID (MAC) — needed for /setZone.
+// Cache device MACs — needed for /setZone multiroom API.
 const deviceIdCache = new Map();
 async function fetchDeviceId(ip) {
   if (deviceIdCache.has(ip)) return deviceIdCache.get(ip);
   try {
     const r = await fetch(bose(ip, '/info'), { signal: AbortSignal.timeout(5000) });
     const m = /deviceID="([^"]+)"/.exec(await r.text());
-    if (m) {
-      deviceIdCache.set(ip, m[1]);
-      return m[1];
-    }
+    if (m) { deviceIdCache.set(ip, m[1]); return m[1]; }
   } catch {}
   return null;
 }
 
 async function playZone(stream) {
   const [master, ...slaves] = config.DEVICES;
-
-  // Solo case: just play.
   if (!slaves.length) return play(master.ip, stream);
 
-  // Resolve deviceIDs for everyone in the zone.
-  const masterId = await fetchDeviceId(master.ip);
+  console.log(`\n━━ PLAY ZONE [${stream.name}] ━━`);
+
+  // Resolve MACs in parallel — needed for /setZone.
+  const [masterId, ...slaveIds] = await Promise.all(
+    [master, ...slaves].map((d) => fetchDeviceId(d.ip))
+  );
   if (!masterId) return { ok: false, error: 'master deviceID unavailable', step: 'fetchDeviceId' };
 
-  const members = [];
-  for (const s of slaves) {
-    const id = await fetchDeviceId(s.ip);
-    if (id) members.push(`<member ipaddress="${s.ip}">${id}</member>`);
-  }
+  const members = slaves
+    .map((d, i) => (slaveIds[i] ? `<member ipaddress="${d.ip}">${slaveIds[i]}</member>` : null))
+    .filter(Boolean)
+    .join('');
 
-  // Set up the zone first — slaves listen for the master's stream as soon as it starts.
-  const zoneXml = `<zone master="${masterId}">${members.join('')}</zone>`;
-  const zoneResult = await postXml(master.ip, '/setZone', zoneXml);
+  // Establish the zone BEFORE playing so slaves start syncing as soon as
+  // the master's audio begins.
+  const zoneResult = await postXml(master.ip, '/setZone', `<zone master="${masterId}">${members}</zone>`);
   if (!zoneResult.ok) return { ...zoneResult, step: 'setZone' };
+  console.log('  ✓ zone established');
 
-  // Now start playback on the master — slaves auto-sync.
-  const playResult = await play(master.ip, stream);
-  if (!playResult.ok) return { ...playResult, step: 'play' };
-
-  return { ok: true };
+  // Play on master via UPnP — slaves sync to master's audio output automatically.
+  return play(master.ip, stream);
 }
 
 // ── Routes ──────────────────────────────────────────────────────────────────
-app.get('/station.json/:slot', (req, res) => {
-  const timestamp = new Date().toISOString();
-  const slot = req.params.slot;
-  const ip = req.ip;
-  console.log(`\n✓ [${timestamp}] station.json FETCH received - slot=${slot} from=${ip}`);
-  const stream = streamBySlot(slot);
-  if (!stream) {
-    console.log(`  ✗ No stream found for slot=${slot}`);
-    return res.status(404).json({ error: 'Unknown stream slot' });
-  }
-  const response = {
-    audio: { hasPlaylist: false, isRealtime: true, streamUrl: stream.url },
-    imageUrl: '',
-    name: stream.name,
-    streamType: 'liveRadio',
-  };
-  console.log(`  ✓ Responding with stream: ${stream.name} (${stream.url})`);
-  res.json(response);
-});
-
 app.get('/api/config', (_req, res) => {
   res.json({
     streams: enabledStreams().map((s) => ({ slot: s.slot, name: s.name, logo: s.logo || null })),
@@ -297,10 +276,38 @@ app.get('/status/:deviceId', async (req, res) => {
   res.json(results);
 });
 
+// Diagnostic: proxy the device's /sources and /info responses so we can
+// inspect firmware version and available source types without hitting the
+// device API directly from the browser (CORS).
+app.get('/diag/:deviceId', async (req, res) => {
+  const device = deviceById(req.params.deviceId);
+  if (!device) return res.status(404).json({ error: 'Unknown device' });
+  const ip = device.ip;
+  const get = async (endpoint) => {
+    try {
+      const r = await fetch(bose(ip, endpoint), { signal: AbortSignal.timeout(5000) });
+      return { status: r.status, body: await r.text() };
+    } catch (err) {
+      return { error: err.message };
+    }
+  };
+  const [sources, info, presets, nowPlaying] = await Promise.all([
+    get('/sources'),
+    get('/info'),
+    get('/presets'),
+    get('/now_playing'),
+  ]);
+  console.log(`\n━━ DIAG [${device.name} / ${ip}] ━━`);
+  console.log('sources:', sources.body?.slice(0, 800));
+  console.log('info:', info.body?.slice(0, 400));
+  console.log('presets:', presets.body?.slice(0, 400));
+  console.log('now_playing:', nowPlaying.body?.slice(0, 400));
+  res.json({ sources, info, presets, nowPlaying });
+});
+
 // Serve the built Vue SPA in production
 app.use(express.static(path.join(__dirname, 'dist')));
 
 app.listen(config.PORT, config.HOST, () => {
-  console.log(`\n  SoundTouch Player → http://localhost:${config.PORT}`);
-  console.log(`  station.json      → http://${localIp()}:${config.PORT}/station.json\n`);
+  console.log(`\n  SoundTouch Player → http://localhost:${config.PORT}\n`);
 });
