@@ -214,7 +214,7 @@ async function setVolume(deviceId, value) {
       >
         <span v-if="isBusy('all')" class="spinner" aria-hidden="true"></span>
         <span v-else class="icon">{{ anyPlaying ? '⏹' : '▶' }}</span>
-        Les deux
+        Tous les appareils
       </button>
     </div>
     <div id="msg" :class="messageStatus">{{ message }}</div>
