@@ -166,21 +166,24 @@ async function setVolume(deviceId, value) {
       <img
         v-if="logoUrl"
         :src="logoUrl"
-        :alt="stationName"
+        alt=""
         class="logo"
         @error="logoUrl = null"
       />
       <h1>{{ stationName }}</h1>
-      <select
-        v-if="streams.length > 1"
-        class="stream-select"
-        :value="selectedSlot"
-        @change="selectedSlot = Number($event.target.value)"
-      >
-        <option v-for="s in streams" :key="s.slot" :value="s.slot">{{ s.name }}</option>
-      </select>
+      <label>
+        Sélectionner une station:
+        <select
+          v-if="streams.length > 1"
+          class="stream-select"
+          :value="selectedSlot"
+          @change="selectedSlot = Number($event.target.value)"
+        >
+          <option v-for="s in streams" :key="s.slot" :value="s.slot">{{ s.name }}</option>
+        </select>
+      </label>
     </header>
-    <div class="devices">
+    <main class="devices">
       <div v-for="d in devices" :key="d.id" class="device">
         <button
           class="btn"
@@ -188,12 +191,16 @@ async function setVolume(deviceId, value) {
           :disabled="isBusy(d.id)"
           @click="toggle(d.id)"
         >
-          <span v-if="isBusy(d.id)" class="spinner" aria-hidden="true"></span>
-          <span v-else class="icon">{{ isPlaying(d.id) ? '⏹' : '▶' }}</span>
+          <span v-if="isBusy(d.id)" class="spinner" aria-label="Démarrage de la lecture"></span>
+          <span v-else class="icon" :aria-label="isPlaying(d.id) ? 'Arrêter' : 'Lire'">
+            {{ isPlaying(d.id) ? '⏹' : '▶' }}
+          </span>
           {{ d.name }}
         </button>
         <div class="volume">
+          <label :for="'vol-' + d.id"">Volume</label>
           <input
+            :id="'vol-' + d.id"
             type="range"
             min="0"
             max="100"
@@ -212,12 +219,14 @@ async function setVolume(deviceId, value) {
         :disabled="isBusy('all')"
         @click="toggle('all')"
       >
-        <span v-if="isBusy('all')" class="spinner" aria-hidden="true"></span>
-        <span v-else class="icon">{{ anyPlaying ? '⏹' : '▶' }}</span>
+        <span v-if="isBusy('all')" class="spinner" aria-label="Démarrage de la lecture en cours sur tous les appareils"></span>
+        <span v-else class="icon" :aria-label="anyPlaying ? 'Arrêter' : 'Lire'">
+          {{ anyPlaying ? '⏹' : '▶' }}
+        </span>
         Tous les appareils
       </button>
-    </div>
-    <div id="msg" :class="messageStatus">{{ message }}</div>
+    </main>
+    <output id="msg" :class="messageStatus">{{ message }}</output>
   </div>
 </template>
 
@@ -266,7 +275,6 @@ p  { font-size: .85rem; color: #aaa; }
   flex-direction: column;
   gap: 1rem;
   align-items: stretch;
-  width: min(420px, 90vw);
 }
 .device {
   display: flex;
